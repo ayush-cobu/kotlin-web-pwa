@@ -16,6 +16,7 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -38,13 +39,23 @@ class MainActivity : ComponentActivity() {
 
     private var cameraImageUri: Uri? = null
 
+    private companion object {
+        private const val DEFAULT_URL =
+            "http://10.0.2.2:3000/?authToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbEFkZHJlc3MiOiJheXVzaEBzaGVsbHkuY29tIn0.AlzznDNkEQ2MxmnlsqhEXJ9ASf9DA3czuEBfAwice9U&homebodyUserUuid=865e1b8e-5026-4991-9bee-036a4272c64c&emailAddress=ayush%40shelly.com&buildingName=9+Shelly+St"
+
+        // Enforced in the Photo Picker UI (where supported)
+        private const val MAX_IMAGES = 3
+    }
+
     private val cameraPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                openFileChooser(pendingParams)
-            } else {
-                cleanupChooser(null)
-            }
+            if (granted) openFileChooser(pendingParams) else cleanupChooser(null)
+        }
+
+    // Android Photo Picker (multi-select with max)
+    private val pickMultipleImagesLauncher =
+        registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_IMAGES)) { uris ->
+            cleanupChooser(if (uris.isEmpty()) null else uris.toTypedArray())
         }
 
     private val fileChooserLauncher =
@@ -153,21 +164,18 @@ class MainActivity : ComponentActivity() {
         // 1) capture=true (your takePhoto flow): open camera directly
         if (captureEnabled) {
             if (launchCameraOrNull()) return
-            // fallback if no camera handler / error
         }
 
-        // 2) multiple images requested: open multi-select picker (no camera)
+        // 2) multiple images requested: use Photo Picker with max selection
+        // (better UX: user sees they can only pick up to MAX_IMAGES)
         if (imageRequest && allowMultiple) {
-            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "image/*"
-                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            }
-            fileChooserLauncher.launch(intent)
+            pickMultipleImagesLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
             return
         }
 
-        // 3) single image requested: prefer camera directly (no chooser routing issues)
+        // 3) single image requested: prefer camera directly
         if (imageRequest && !allowMultiple) {
             if (launchCameraOrNull()) return
 
@@ -243,10 +251,5 @@ class MainActivity : ComponentActivity() {
             "${applicationContext.packageName}.fileprovider",
             image
         )
-    }
-
-    companion object {
-        private const val DEFAULT_URL =
-            "http://10.0.2.2:3000/?authToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbEFkZHJlc3MiOiJheXVzaEBzaGVsbHkuY29tIn0.AlzznDNkEQ2MxmnlsqhEXJ9ASf9DA3czuEBfAwice9U&homebodyUserUuid=865e1b8e-5026-4991-9bee-036a4272c64c&emailAddress=ayush%40shelly.com&buildingName=9+Shelly+St"
     }
 }
